@@ -1,0 +1,26 @@
+{
+  "name": "nodeplayer-file",
+  "version": "0.1.0",
+  "description": "local file backend for nodeplayer",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FruitieX/nodeplayer-file.git"
+  },
+  "author": "FruitieX",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/FruitieX/nodeplayer-file/issues"
+  },
+  "homepage": "https://github.com/FruitieX/nodeplayer-file",
+  "dependencies": {
+    "fluent-ffmpeg": "^2.0.0-rc3",
+    "mkdirp": "^0.5.0",
+    "mongodb": "^1.4.30",
+    "mongoskin": "^1.4.12",
+    "node-ffprobe": "^1.2.2"
+  }
+}
