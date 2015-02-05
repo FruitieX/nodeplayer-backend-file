@@ -143,9 +143,10 @@ var probeCallback = function(err, probeData) {
     }
 }
 
-fileBackend.init = function(_config, callback) {
+fileBackend.init = function(_player, callback) {
     console.log('fileBackend.init');
-    config = _config;
+    player = _player;
+    config = _player.config;
 
     mkdirp(config.songCachePath + '/file/incomplete');
 
