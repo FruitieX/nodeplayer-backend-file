@@ -9,7 +9,7 @@ var ffmpeg = require('fluent-ffmpeg');
 
 var fileBackend = {};
 
-var config, walker, db, medialibraryPath;
+var config, player, walker, db, medialibraryPath;
 
 // TODO: seeking
 var encodeSong = function(origStream, seek, songID, callback, errCallback) {
