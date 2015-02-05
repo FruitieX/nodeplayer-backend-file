@@ -11,11 +11,12 @@ var fileBackend = {};
 
 var config, walker, db, medialibraryPath;
 
-var encodeSong = function(origPath, songID, callback, errCallback) {
+// TODO: seeking
+var encodeSong = function(origStream, seek, songID, callback, errCallback) {
     var incompletePath = config.songCachePath + '/file/incomplete/' + songID + '.opus';
     var encodedPath = config.songCachePath + '/file/' + songID + '.opus';
 
-    var command = ffmpeg(fs.createReadStream(origPath))
+    var command = ffmpeg(origStream)
         .noVideo()
         .audioCodec('libopus')
         .audioBitrate('192')
@@ -56,7 +57,7 @@ fileBackend.prepareSong = function(songID, callback, errCallback) {
                 console.log('song found: ' + songID);
                 callback();
             } else {
-                encodeSong(item.file, songID, callback, errCallback);
+                encodeSong(fs.createReadStream(item.file), 0, songID, callback, errCallback);
             }
         } else {
             errCallback('song not found in local db');
