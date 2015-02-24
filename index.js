@@ -11,7 +11,7 @@ var _ = require('underscore');
 var fileBackend = {};
 fileBackend.name = 'file';
 
-var config, walker, db, medialibraryPath;
+var config, logger, walker, db, medialibraryPath;
 
 // TODO: seeking
 var encodeSong = function(origStream, seek, songID, progCallback, errCallback) {
@@ -27,7 +27,7 @@ var encodeSong = function(origStream, seek, songID, progCallback, errCallback) {
         .audioBitrate('192')
         .format('opus')
         .on('error', function(err) {
-            console.log('file: error while transcoding ' + songID + ': ' + err);
+            logger.error('file: error while transcoding ' + songID + ': ' + err);
             if(fs.existsSync(incompletePath))
                 fs.unlinkSync(incompletePath);
             errCallback(err);
@@ -41,7 +41,7 @@ var encodeSong = function(origStream, seek, songID, progCallback, errCallback) {
     });
     opusStream.on('end', function() {
         incompleteStream.end(undefined, undefined, function() {
-            console.log('transcoding ended for ' + songID);
+            logger.verbose('transcoding ended for ' + songID);
 
             // TODO: we don't know if transcoding ended successfully or not,
             // and there might be a race condition between errCallback deleting
@@ -55,10 +55,10 @@ var encodeSong = function(origStream, seek, songID, progCallback, errCallback) {
         });
     });
 
-    console.log('transcoding ' + songID + '...');
+    logger.verbose('transcoding ' + songID + '...');
     return function(err) {
         command.kill();
-        console.log('file: canceled preparing: ' + songID + ': ' + err);
+        logger.verbose('file: canceled preparing: ' + songID + ': ' + err);
         if(fs.existsSync(incompletePath))
             fs.unlinkSync(incompletePath);
         errCallback('canceled preparing: ' + songID + ': ' + err);
@@ -182,27 +182,28 @@ var probeCallback = function(err, probeData, next) {
             song.duration = probeData.format.duration * 1000;
             db.collection('songs').update({file: probeData.file}, {'$set':song}, {upsert: true}, function(err, result) {
                 if (result == 1) {
-                    console.log('Upserted: ' + probeData.file);
+                    logger.debug('Upserted: ' + probeData.file);
                     upserted++;
                 } else {
-                    console.log('error while updating db: ' + err);
+                    logger.error('error while updating db: ' + err);
                 }
 
                 next();
             });
         } else {
-            console.log('format not supported, skipping...');
+            logger.verbose('format not supported, skipping...');
             next();
         }
     } else {
-        console.log('error while probing:' + err);
+        logger.error('error while probing:' + err);
         next();
     }
 }
 
-fileBackend.init = function(_player, callback) {
+fileBackend.init = function(_player, _logger, callback) {
     player = _player;
     config = _player.config;
+    logger = _logger;
 
     mkdirp(config.songCachePath + '/file/incomplete');
 
@@ -212,7 +213,7 @@ fileBackend.init = function(_player, callback) {
 
     // Adds text index to database for title, artist and album fields
     // TODO: better handling and error checking
-    var cb = function(arg1, arg2) {console.log(arg1);console.log(arg2)}
+    var cb = function(arg1, arg2) {logger.debug(arg1);logger.debug(arg2)}
     db.collection('songs').ensureIndex({ title: 'text', artist: 'text', album: 'text' }, cb);
 
     var options = {
@@ -222,35 +223,35 @@ fileBackend.init = function(_player, callback) {
     // walk the filesystem and scan files
     // TODO: also check through entire DB to see that all files still exist on the filesystem
     var startTime = new Date();
-    console.log('Scanning directory: ' + mediaLibraryPath);
+    logger.info('Scanning directory: ' + mediaLibraryPath);
     walker = walk.walk(mediaLibraryPath, options);
     var scanned = 0;
     walker.on('file', function (root, fileStats, next) {
         file = path.join(root, fileStats.name);
-        console.log('Scanning: ' + file)
+        logger.verbose('Scanning: ' + file)
             scanned++;
         probe(file, function(err, probeData) {
             probeCallback(err, probeData, next)
         });
     });
     walker.on('end', function() {
-        console.log('Scanned files: ' + scanned);
-        console.log('Upserted files: ' + upserted);
-        console.log('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
+        logger.verbose('Scanned files: ' + scanned);
+        logger.verbose('Upserted files: ' + upserted);
+        logger.verbose('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
 
         // set fs watcher on media directory
         watch(mediaLibraryPath, {recursive: true, followSymlinks: true}, function (filename) {
             if(fs.existsSync(filename)) {
-                console.log(filename + ' modified or created');
+                logger.debug(filename + ' modified or created');
                 probe(filename, function(err, probeData) {
                     probeCallback(err, probeData, function() {
-                        console.log(filename + ' added/updated to db');
+                        logger.debug(filename + ' added/updated to db');
                     })
                 });
             } else {
-                console.log(filename + ' deleted');
+                logger.debug(filename + ' deleted');
                 db.collection('songs').remove({ file: filename }, function (err, items) {
-                    console.log(filename + ' deleted from db: ' + err + ', ' + items);
+                    logger.debug(filename + ' deleted from db: ' + err + ', ' + items);
                 });
             }
         });
