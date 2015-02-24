@@ -5,6 +5,7 @@ var mkdirp = require('mkdirp');
 var url = require('url');
 var fs = require('fs');
 var ffmpeg = require('fluent-ffmpeg');
+var _ = require('underscore');
 
 var fileBackend = {};
 fileBackend.name = 'file';
@@ -154,12 +155,25 @@ var probeCallback = function(err, probeData, next) {
                 album: '',
                 duration: '0',
             };
-            if (probeData.metadata.title != undefined)
-                song.title = probeData.metadata.title;
-            if (probeData.metadata.artist != undefined)
-                song.artist = probeData.metadata.artist;
-            if (probeData.metadata.album != undefined)
-                song.album = probeData.metadata.album;
+
+            // some tags may be in mixed/all caps, let's convert every tag to lower case
+            var key, keys = Object.keys(probeData.metadata);
+            var n = keys.length;
+            var metadata = {};
+            while(n--) {
+                key = keys[n];
+                metadata[key.toLowerCase()] = probeData.metadata[key];
+            }
+
+            if (!_.isUndefined(metadata.title))
+                song.title = metadata.title;
+            if (!_.isUndefined(metadata.artist))
+                song.artist = metadata.artist;
+            if (!_.isUndefined(metadata.album))
+                song.album = metadata.album;
+
+            song.file = probeData.file;
+
             song.duration = probeData.format.duration * 1000;
             db.collection('songs').update({file: probeData.file}, {'$set':song}, {upsert: true}, function(err, result) {
                 if (result == 1) {
