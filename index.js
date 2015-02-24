@@ -251,7 +251,7 @@ fileBackend.init = function(_player, callback) {
                 });
             } else {
                 console.log(filename + ' deleted');
-                db.collection('songs').find({ file: filename }).toArray(function (err, items) {
+                db.collection('songs').remove({ file: filename }, function (err, items) {
                     console.log(filename + ' deleted from db: ' + err + ', ' + items);
                 });
             }
