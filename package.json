@@ -21,6 +21,7 @@
     "mkdirp": "^0.5.0",
     "mongodb": "^1.4.30",
     "mongoskin": "^1.4.12",
-    "node-ffprobe": "^1.2.2"
+    "node-ffprobe": "^1.2.2",
+    "walk": "^2.3.9"
   }
 }

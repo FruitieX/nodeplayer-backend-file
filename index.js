@@ -1,4 +1,3 @@
-var send = require('send');
 var walk = require('walk');
 var probe = require('node-ffprobe');
 var path = require('path');
@@ -8,6 +7,7 @@ var fs = require('fs');
 var ffmpeg = require('fluent-ffmpeg');
 
 var fileBackend = {};
+fileBackend.name = 'file';
 
 var config, walker, db, medialibraryPath;
 
@@ -85,7 +85,7 @@ fileBackend.prepareSong = function(songID, progCallback, errCallback) {
             if(canceled) {
                 errCallback('song was canceled before encoding started');
             } else if(item) {
-                cancelEncode = encodeSong(fs.createReadStream(item.file), 0, songID, callback, errCallback);
+                cancelEncode = encodeSong(fs.createReadStream(item.file), 0, songID, progCallback, errCallback);
             } else {
                 errCallback('song not found in local db');
             }
@@ -93,6 +93,11 @@ fileBackend.prepareSong = function(songID, progCallback, errCallback) {
 
         return cancelEncode;
     }
+};
+
+fileBackend.isPrepared = function(songID) {
+    var filePath = config.songCachePath + '/file/' + songID + '.opus';
+    return fs.existsSync(filePath);
 };
 
 fileBackend.search = function(query, callback, errCallback) {
@@ -122,26 +127,24 @@ fileBackend.search = function(query, callback, errCallback) {
         var results = {};
         results.songs = {};
         for (var song in items) {
-            results.songs[items[song]._id] = {
+            results.songs[items[song]._id.toString()] = {
                 artist: items[song].artist,
                 title: items[song].title,
                 album: items[song].album,
                 albumArt: null, // TODO: can we add this?
                 duration: items[song].duration,
-                songID: items[song]._id,
+                songID: items[song]._id.toString(),
                 score: 100, // TODO
                 backendName: 'file',
                 format: 'opus'
             };
-            if (results.songs.length > config.searchResultCnt) break;
+            if (Object.keys(results.songs).length > config.searchResultCnt) break;
         }
         callback(results);
     });
 };
 var upserted = 0;
-var toProbe = 0;
-var probeCallback = function(err, probeData) {
-    toProbe--;
+var probeCallback = function(err, probeData, next) {
     var formats = ['mp3'];
     if (probeData) {
         if (formats.indexOf(probeData.format.format_name) >= 0) { // Format is supported
@@ -158,17 +161,20 @@ var probeCallback = function(err, probeData) {
             if (probeData.metadata.album != undefined)
                 song.album = probeData.metadata.album;
             song.duration = probeData.format.duration * 1000;
-            db.collection('songs').update({file: probeData.file}, {'$set':song}, {upsert: true},
-                    function(err, result) {
-                        if (result == 1) {
-                            console.log('Upserted: ' + probeData.file);
-                            upserted++;
-                        } else
-                            console.log(err);
-                    });
+            db.collection('songs').update({file: probeData.file}, {'$set':song}, {upsert: true}, function(err, result) {
+                if (result == 1) {
+                    console.log('Upserted: ' + probeData.file);
+                    upserted++;
+                } else {
+                    console.log('error while updating db: ' + err);
+                }
+
+                next();
+            });
         }
-    } else if (err) {
-        console.log(err);
+    } else {
+        console.log('error while probing:' + err);
+        next();
     }
 }
 
@@ -180,7 +186,7 @@ fileBackend.init = function(_player, callback) {
 
     db = require('mongoskin').db(config.mongo, {native_parser:true, safe:true});
 
-    medialibraryPath = config.mediaLibraryPath;
+    mediaLibraryPath = config.mediaLibraryPath;
 
     // Adds text index to database for title, artist and album fields
     // TODO: better handling and error checking
@@ -196,27 +202,22 @@ fileBackend.init = function(_player, callback) {
      * matching the prefix and also not reprobing files already in the database.
      */
     var startTime = new Date();
-    console.log('Scanning directory: ' + medialibraryPath);
-    walker = walk.walk(medialibraryPath, options);
+    console.log('Scanning directory: ' + mediaLibraryPath);
+    walker = walk.walk(mediaLibraryPath, options);
     var scanned = 0;
     walker.on('file', function (root, fileStats, next) {
         file = path.join(root, fileStats.name);
         console.log('Scanning: ' + file)
             scanned++;
-        toProbe++;
-        probe(file, probeCallback);
-        next();
+        probe(file, function(err, probeData) {
+            probeCallback(err, probeData, next)
+        });
     });
     walker.on('end', function() {
-        // Wait until all probes are ready
-        var scanResultInterval = setInterval(function() {
-            if (toProbe == 0) {
-                console.log('Scanned files: ' + scanned);
-                console.log('Upserted files: ' + upserted);
-                console.log('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
-                clearInterval(scanResultInterval);
-            }
-        }, 200);
+        console.log('Scanned files: ' + scanned);
+        console.log('Upserted files: ' + upserted);
+        console.log('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
+        callback();
     });
 };
 module.exports = fileBackend;
