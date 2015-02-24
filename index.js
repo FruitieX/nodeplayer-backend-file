@@ -145,7 +145,7 @@ fileBackend.search = function(query, callback, errCallback) {
 };
 var upserted = 0;
 var probeCallback = function(err, probeData, next) {
-    var formats = ['mp3'];
+    var formats = config.mediaLibraryFormats;
     if (probeData) {
         if (formats.indexOf(probeData.format.format_name) >= 0) { // Format is supported
             var song = {
@@ -171,6 +171,9 @@ var probeCallback = function(err, probeData, next) {
 
                 next();
             });
+        } else {
+            console.log('format not supported, skipping...');
+            next();
         }
     } else {
         console.log('error while probing:' + err);
@@ -217,6 +220,16 @@ fileBackend.init = function(_player, callback) {
         console.log('Scanned files: ' + scanned);
         console.log('Upserted files: ' + upserted);
         console.log('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
+
+        // set fs watcher on media directory
+        fs.watch(mediaLibraryPath, function (event, filename) {
+            console.log('event is: ' + event);
+            if (filename) {
+                console.log('filename provided: ' + filename);
+            } else {
+                console.log('filename not provided');
+            }
+        });
         callback();
     });
 };
