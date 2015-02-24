@@ -12,28 +12,46 @@ var fileBackend = {};
 var config, walker, db, medialibraryPath;
 
 // TODO: seeking
-var encodeSong = function(origStream, seek, songID, callback, errCallback) {
+var encodeSong = function(origStream, seek, songID, progCallback, errCallback) {
     var incompletePath = config.songCachePath + '/file/incomplete/' + songID + '.opus';
+    var incompleteStream = fs.createWriteStream(incompletePath, {flags: 'w'});
     var encodedPath = config.songCachePath + '/file/' + songID + '.opus';
 
     var command = ffmpeg(origStream)
         .noVideo()
+        //.inputFormat('mp3')
+        //.inputOption('-ac 2')
         .audioCodec('libopus')
         .audioBitrate('192')
-        .on('end', function() {
-            console.log('successfully transcoded ' + songID);
-
-            // atomically (I hope so) move result to encodedPath
-            fs.renameSync(incompletePath, encodedPath);
-            callback();
+        .format('opus')
+        .on('error', function(err) {
+            console.log('file: error while transcoding ' + songID + ': ' + err);
+            if(fs.existsSync(incompletePath))
+                fs.unlinkSync(incompletePath);
+            errCallback(err);
         })
-    .on('error', function(err) {
-        console.log('file: error while transcoding ' + songID + ': ' + err);
-        if(fs.existsSync(incompletePath))
-            fs.unlinkSync(incompletePath);
-        errCallback();
-    })
-    .save(incompletePath);
+
+    var opusStream = command.pipe(null, {end: true});
+    opusStream.on('data', function(chunk) {
+        incompleteStream.write(chunk, undefined, function() {
+            progCallback(chunk.length, false);
+        });
+    });
+    opusStream.on('end', function() {
+        incompleteStream.end(undefined, undefined, function() {
+            console.log('transcoding ended for ' + songID);
+
+            // TODO: we don't know if transcoding ended successfully or not,
+            // and there might be a race condition between errCallback deleting
+            // the file and us trying to move it to the songCache
+
+            // atomically move result to encodedPath
+            if(fs.existsSync(incompletePath))
+                fs.renameSync(incompletePath, encodedPath);
+
+            progCallback(0, true);
+        });
+    });
 
     console.log('transcoding ' + songID + '...');
     return function(err) {
@@ -41,73 +59,84 @@ var encodeSong = function(origStream, seek, songID, callback, errCallback) {
         console.log('file: canceled preparing: ' + songID + ': ' + err);
         if(fs.existsSync(incompletePath))
             fs.unlinkSync(incompletePath);
-        errCallback();
+        errCallback('canceled preparing: ' + songID + ': ' + err);
     };
 };
 
 // cache songID to disk.
-// on success: callback must be called
+// on success: progCallback must be called with true as argument
 // on failure: errCallback must be called with error message
-fileBackend.prepareSong = function(songID, callback, errCallback) {
-    console.log('fileBackend.cache ' + songID);
-    db.collection('songs').findById(songID, function (err, item) {
-        if(item) {
-            var encodedPath = config.songCachePath + '/file/' + songID + '.opus';
-            if(fs.existsSync(encodedPath)) {
-                console.log('song found: ' + songID);
-                callback();
+// returns a function that cancels preparing
+fileBackend.prepareSong = function(songID, progCallback, errCallback) {
+    var filePath = config.songCachePath + '/file/' + songID + '.opus';
+
+    if(fs.existsSync(filePath)) {
+        progCallback(0, true);
+    } else {
+        var cancelEncode = null;
+        var canceled = false;
+        var cancelPreparing = function() {
+            canceled = true;
+            if(cancelEncode)
+                cancelEncode();
+        };
+
+        db.collection('songs').findById(songID, function (err, item) {
+            if(canceled) {
+                errCallback('song was canceled before encoding started');
+            } else if(item) {
+                cancelEncode = encodeSong(fs.createReadStream(item.file), 0, songID, callback, errCallback);
             } else {
-                encodeSong(fs.createReadStream(item.file), 0, songID, callback, errCallback);
+                errCallback('song not found in local db');
             }
-        } else {
-            errCallback('song not found in local db');
-        }
-    });
+        });
+
+        return cancelEncode;
+    }
 };
+
 fileBackend.search = function(query, callback, errCallback) {
-    db.collection('songs').find({ $text: { $search: query.terms} }).toArray(
-            function (err, items) {
-                // Also filter away special chars? (Remix) ?= Remix åäö日本穂?
-                var termsArr = query.terms.split(' ');
-                termsArr.forEach(function(e, i, arr) {arr[i] = e.toLowerCase()});
-                for (var i in items) {
-                    items[i].score = 0;
-                    var words = [];
-                    if (items[i].title.split)
-                        words = words.concat(items[i].title.split(' '));
-                    if (items[i].artist.split)
-                        words = words.concat(items[i].artist.split(' '));
-                    if (items[i].album.split)
-                        words = words.concat(items[i].album.split(' '));
-                    words.forEach(function(e, i, arr) {arr[i] = e.toLowerCase()});
-                    for (var ii in words) {
-                        if (termsArr.indexOf(words[ii]) >= 0) {
-                            items[i].score++;
-                        }
-                    }
+    db.collection('songs').find({ $text: { $search: query.terms} }).toArray(function (err, items) {
+        // Also filter away special chars? (Remix) ?= Remix åäö日本穂?
+        var termsArr = query.terms.split(' ');
+        termsArr.forEach(function(e, i, arr) {arr[i] = e.toLowerCase()});
+        for (var i in items) {
+            items[i].score = 0;
+            var words = [];
+            if (items[i].title.split)
+                words = words.concat(items[i].title.split(' '));
+            if (items[i].artist.split)
+                words = words.concat(items[i].artist.split(' '));
+            if (items[i].album.split)
+                words = words.concat(items[i].album.split(' '));
+            words.forEach(function(e, i, arr) {arr[i] = e.toLowerCase()});
+            for (var ii in words) {
+                if (termsArr.indexOf(words[ii]) >= 0) {
+                    items[i].score++;
                 }
-                items.sort(function(a, b) {
-                    return b.score - a.score; // sort by score
-                })
-                var results = {};
-                results.songs = {};
-                for (var song in items) {
-                    results.songs.push({
-                        artist: items[song].artist,
-                        title: items[song].title,
-                        album: items[song].album,
-                        albumArt: null, // TODO: can we add this?
-                        duration: items[song].duration,
-                        songID: items[song]._id,
-                        score: 100, // TODO
-                        backendName: 'file',
-                        format: 'opus'
-                    });
-                    if (results.songs.length > config.searchResultCnt) break;
-                }
-                // console.log(songs);
-                callback(songs);
-            });
+            }
+        }
+        items.sort(function(a, b) {
+            return b.score - a.score; // sort by score
+        })
+        var results = {};
+        results.songs = {};
+        for (var song in items) {
+            results.songs[items[song]._id] = {
+                artist: items[song].artist,
+                title: items[song].title,
+                album: items[song].album,
+                albumArt: null, // TODO: can we add this?
+                duration: items[song].duration,
+                songID: items[song]._id,
+                score: 100, // TODO
+                backendName: 'file',
+                format: 'opus'
+            };
+            if (results.songs.length > config.searchResultCnt) break;
+        }
+        callback(results);
+    });
 };
 var upserted = 0;
 var toProbe = 0;
@@ -143,9 +172,9 @@ var probeCallback = function(err, probeData) {
     }
 }
 
-fileBackend.init = function(_config, callback) {
-    console.log('fileBackend.init');
-    config = _config;
+fileBackend.init = function(_player, callback) {
+    player = _player;
+    config = _player.config;
 
     mkdirp(config.songCachePath + '/file/incomplete');
 
@@ -189,18 +218,5 @@ fileBackend.init = function(_config, callback) {
             }
         }, 200);
     });
-};
-fileBackend.middleware = function(req, res, next) {
-    console.log('fileBackend.middleware');
-    var id = url.parse(req.url).pathname;
-    id = id.substr(1);
-    id = id.split('.')[0];
-
-    db.collection('songs').findById(id, function (err, item) {
-        console.log(id + ': ' + item.file);
-
-        send(req, item.file).pipe(res);
-    });
-
 };
 module.exports = fileBackend;
