@@ -1,3 +1,5 @@
+"use strict";
+
 var walk = require('walk');
 var probe = require('node-ffprobe');
 var path = require('path');
@@ -11,7 +13,7 @@ var _ = require('underscore');
 var fileBackend = {};
 fileBackend.name = 'file';
 
-var config, logger, walker, db, medialibraryPath;
+var fileConfig, config, logger, player, walker, db, medialibraryPath;
 
 // TODO: seeking
 var encodeSong = function(origStream, seek, songID, progCallback, errCallback) {
@@ -151,7 +153,7 @@ fileBackend.search = function(query, callback, errCallback) {
 };
 var upserted = 0;
 var probeCallback = function(err, probeData, next) {
-    var formats = config.mediaLibraryFormats;
+    var formats = fileConfig.mediaLibraryFormats;
     if (probeData) {
         if (formats.indexOf(probeData.format.format_name) >= 0) { // Format is supported
             var song = {
@@ -205,11 +207,36 @@ fileBackend.init = function(_player, _logger, callback) {
     config = _player.config;
     logger = _logger;
 
+    var fileConfigPath = config.getConfigDir() + 'file-config.json';
+    try {
+        fileConfig = require(fileConfigPath);
+    } catch(e) {
+        if(e.code === 'MODULE_NOT_FOUND') {
+            logger.error('File backend is enabled, but no configuration file was found.');
+            logger.error('Creating sample configuration file containing default settings into:');
+            logger.error(fileConfigPath);
+
+            mkdirp(config.getConfigDir());
+            fs.writeFileSync(fileConfigPath, JSON.stringify({
+                mongo:          "mongodb://localhost:27017/nodeplayer-file",
+                importPath:     "/home/example/testlibrary",
+                importFormats:  ["mp3", "flac", "ogg", "opus"],
+                followSymlinks: true
+            }, undefined, 4));
+
+            logger.error('File created. Go edit it NOW! Relaunch nodeplayer when done configuring.');
+            process.exit(0);
+        } else {
+            logger.error('unexpected error while loading file backend configuration:');
+            logger.error(e);
+        }
+    }
+
     mkdirp(config.songCachePath + '/file/incomplete');
 
-    db = require('mongoskin').db(config.mongo, {native_parser:true, safe:true});
+    db = require('mongoskin').db(fileConfig.mongo, {native_parser:true, safe:true});
 
-    mediaLibraryPath = config.mediaLibraryPath;
+    var importPath = fileConfig.importPath;
 
     // Adds text index to database for title, artist and album fields
     // TODO: better handling and error checking
@@ -217,14 +244,14 @@ fileBackend.init = function(_player, _logger, callback) {
     db.collection('songs').ensureIndex({ title: 'text', artist: 'text', album: 'text' }, cb);
 
     var options = {
-        followLinks: true
+        followLinks: fileConfig.followSymlinks
     };
 
     // walk the filesystem and scan files
     // TODO: also check through entire DB to see that all files still exist on the filesystem
     var startTime = new Date();
-    logger.info('Scanning directory: ' + mediaLibraryPath);
-    walker = walk.walk(mediaLibraryPath, options);
+    logger.info('Scanning directory: ' + importPath);
+    walker = walk.walk(importPath, options);
     var scanned = 0;
     walker.on('file', function (root, fileStats, next) {
         file = path.join(root, fileStats.name);
@@ -240,7 +267,7 @@ fileBackend.init = function(_player, _logger, callback) {
         logger.verbose('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
 
         // set fs watcher on media directory
-        watch(mediaLibraryPath, {recursive: true, followSymlinks: true}, function (filename) {
+        watch(importPath, {recursive: true, followSymlinks: fileConfig.followSymlinks}, function (filename) {
             if(fs.existsSync(filename)) {
                 logger.debug(filename + ' modified or created');
                 probe(filename, function(err, probeData) {
