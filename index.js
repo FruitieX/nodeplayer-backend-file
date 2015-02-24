@@ -5,6 +5,7 @@ var mkdirp = require('mkdirp');
 var url = require('url');
 var fs = require('fs');
 var ffmpeg = require('fluent-ffmpeg');
+var watch = require('node-watch');
 var _ = require('underscore');
 
 var fileBackend = {};
@@ -86,7 +87,11 @@ fileBackend.prepareSong = function(songID, progCallback, errCallback) {
             if(canceled) {
                 errCallback('song was canceled before encoding started');
             } else if(item) {
-                cancelEncode = encodeSong(fs.createReadStream(item.file), 0, songID, progCallback, errCallback);
+                var readStream = fs.createReadStream(item.file);
+                cancelEncode = encodeSong(readStream, 0, songID, progCallback, errCallback);
+                readStream.on('error', function(err) {
+                    errCallback(err);
+                });
             } else {
                 errCallback('song not found in local db');
             }
@@ -211,7 +216,7 @@ fileBackend.init = function(_player, callback) {
     db.collection('songs').ensureIndex({ title: 'text', artist: 'text', album: 'text' }, cb);
 
     var options = {
-        followLinks: false
+        followLinks: true
     };
 
     // Walk the filesystem and scan files
@@ -236,15 +241,24 @@ fileBackend.init = function(_player, callback) {
         console.log('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
 
         // set fs watcher on media directory
-        fs.watch(mediaLibraryPath, function (event, filename) {
-            console.log('event is: ' + event);
-            if (filename) {
-                console.log('filename provided: ' + filename);
+        watch(mediaLibraryPath, {recursive: true, followSymlinks: true}, function (filename) {
+            if(fs.existsSync(filename)) {
+                console.log(filename + ' modified or created');
+                probe(filename, function(err, probeData) {
+                    probeCallback(err, probeData, function() {
+                        console.log(filename + ' added/updated to db');
+                    })
+                });
             } else {
-                console.log('filename not provided');
+                console.log(filename + ' deleted');
+                db.collection('songs').find({ file: filename }).toArray(function (err, items) {
+                    console.log(filename + ' deleted from db: ' + err + ', ' + items);
+                });
             }
         });
-        callback();
     });
+
+    // callback right away, as we can scan for songs in the background
+    callback();
 };
 module.exports = fileBackend;
