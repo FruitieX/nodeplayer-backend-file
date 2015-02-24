@@ -219,10 +219,8 @@ fileBackend.init = function(_player, callback) {
         followLinks: true
     };
 
-    // Walk the filesystem and scan files
-    /* TODO: smarter decision on what to probe. Could be limitted to only files
-     * matching the prefix and also not reprobing files already in the database.
-     */
+    // walk the filesystem and scan files
+    // TODO: also check through entire DB to see that all files still exist on the filesystem
     var startTime = new Date();
     console.log('Scanning directory: ' + mediaLibraryPath);
     walker = walk.walk(mediaLibraryPath, options);
