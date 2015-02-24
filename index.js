@@ -153,7 +153,7 @@ fileBackend.search = function(query, callback, errCallback) {
 };
 var upserted = 0;
 var probeCallback = function(err, probeData, next) {
-    var formats = fileConfig.mediaLibraryFormats;
+    var formats = fileConfig.importFormats;
     if (probeData) {
         if (formats.indexOf(probeData.format.format_name) >= 0) { // Format is supported
             var song = {
@@ -254,10 +254,10 @@ fileBackend.init = function(_player, _logger, callback) {
     walker = walk.walk(importPath, options);
     var scanned = 0;
     walker.on('file', function (root, fileStats, next) {
-        file = path.join(root, fileStats.name);
-        logger.verbose('Scanning: ' + file)
+        var filename = path.join(root, fileStats.name);
+        logger.verbose('Scanning: ' + filename)
             scanned++;
-        probe(file, function(err, probeData) {
+        probe(filename, function(err, probeData) {
             probeCallback(err, probeData, next)
         });
     });
@@ -267,6 +267,7 @@ fileBackend.init = function(_player, _logger, callback) {
         logger.verbose('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
 
         // set fs watcher on media directory
+        // TODO: limit how many processes can be active at once
         watch(importPath, {recursive: true, followSymlinks: fileConfig.followSymlinks}, function (filename) {
             if(fs.existsSync(filename)) {
                 logger.debug(filename + ' modified or created');
