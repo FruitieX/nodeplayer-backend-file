@@ -230,6 +230,7 @@ fileBackend.init = function(_player, _logger, callback) {
             mkdirp(config.getConfigDir());
             fs.writeFileSync(fileConfigPath, JSON.stringify({
                 mongo:              "mongodb://localhost:27017/nodeplayer-file",
+                rescanAtStart:      true,
                 importPath:         "/home/example/testlibrary",
                 importFormats:      ["mp3", "flac", "ogg", "opus"],
                 concurrentProbes:   4,
@@ -270,25 +271,27 @@ fileBackend.init = function(_player, _logger, callback) {
         });
     }, fileConfig.concurrentProbes);
 
-    // walk the filesystem and scan files
-    // TODO: also check through entire DB to see that all files still exist on the filesystem
-    logger.info('Scanning directory: ' + importPath);
-    walker = walk.walk(importPath, options);
-    var startTime = new Date();
-    var scanned = 0;
-    walker.on('file', function (root, fileStats, next) {
-        var filename = path.join(root, fileStats.name);
-        logger.verbose('Scanning: ' + filename);
-        scanned++;
-        q.push({
-            filename: filename
+    if(fileConfig.rescanAtStart) {
+        // walk the filesystem and scan files
+        // TODO: also check through entire DB to see that all files still exist on the filesystem
+        logger.info('Scanning directory: ' + importPath);
+        walker = walk.walk(importPath, options);
+        var startTime = new Date();
+        var scanned = 0;
+        walker.on('file', function (root, fileStats, next) {
+            var filename = path.join(root, fileStats.name);
+            logger.verbose('Scanning: ' + filename);
+            scanned++;
+            q.push({
+                filename: filename
+            });
+            next();
         });
-        next();
-    });
-    walker.on('end', function() {
-        logger.verbose('Scanned files: ' + scanned);
-        logger.verbose('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
-    });
+        walker.on('end', function() {
+            logger.verbose('Scanned files: ' + scanned);
+            logger.verbose('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
+        });
+    }
 
     // set fs watcher on media directory
     watch(importPath, {recursive: true, followSymlinks: fileConfig.followSymlinks}, function (filename) {
