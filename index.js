@@ -6,6 +6,7 @@ var path = require('path');
 var mkdirp = require('mkdirp');
 var url = require('url');
 var fs = require('fs');
+var async = require('async');
 var ffmpeg = require('fluent-ffmpeg');
 var watch = require('node-watch');
 var _ = require('underscore');
@@ -230,10 +231,11 @@ fileBackend.init = function(_player, _logger, callback) {
 
             mkdirp(config.getConfigDir());
             fs.writeFileSync(fileConfigPath, JSON.stringify({
-                mongo:          "mongodb://localhost:27017/nodeplayer-file",
-                importPath:     "/home/example/testlibrary",
-                importFormats:  ["mp3", "flac", "ogg", "opus"],
-                followSymlinks: true
+                mongo:              "mongodb://localhost:27017/nodeplayer-file",
+                importPath:         "/home/example/testlibrary",
+                importFormats:      ["mp3", "flac", "ogg", "opus"],
+                concurrentProbes:   4,
+                followSymlinks:     true
             }, undefined, 4));
 
             logger.error('File created. Go edit it NOW! Relaunch nodeplayer when done configuring.');
@@ -259,6 +261,17 @@ fileBackend.init = function(_player, _logger, callback) {
         followLinks: fileConfig.followSymlinks
     };
 
+
+    // create async.js queue to limit concurrent probes
+    var q = async.queue(function(task, callback) {
+        probe(task.filename, function(err, probeData) {
+            probeCallback(err, probeData, function() {
+                callback();
+                task.next();
+            });
+        });
+    }, fileConfig.concurrentProbes);
+
     // walk the filesystem and scan files
     // TODO: also check through entire DB to see that all files still exist on the filesystem
     var startTime = new Date();
@@ -267,10 +280,12 @@ fileBackend.init = function(_player, _logger, callback) {
     var scanned = 0;
     walker.on('file', function (root, fileStats, next) {
         var filename = path.join(root, fileStats.name);
-        logger.verbose('Scanning: ' + filename)
-            scanned++;
-        probe(filename, function(err, probeData) {
-            probeCallback(err, probeData, next)
+        logger.verbose('Scanning: ' + filename);
+        scanned++;
+        logger.silly('q.length(): ' + q.length(), 'q.running(): ' + q.running());
+        q.push({
+            filename: filename,
+            next: next
         });
     });
     walker.on('end', function() {
@@ -279,14 +294,15 @@ fileBackend.init = function(_player, _logger, callback) {
         logger.verbose('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
 
         // set fs watcher on media directory
-        // TODO: limit how many processes can be active at once
         watch(importPath, {recursive: true, followSymlinks: fileConfig.followSymlinks}, function (filename) {
             if(fs.existsSync(filename)) {
-                logger.debug(filename + ' modified or created');
-                probe(filename, function(err, probeData) {
-                    probeCallback(err, probeData, function() {
+                logger.debug(filename + ' modified or created, queued for probing');
+                logger.silly('q.length(): ' + q.length(), 'q.running(): ' + q.running());
+                q.push({
+                    filename: filename,
+                    next: function() {
                         logger.debug(filename + ' added/updated to db');
-                    })
+                    }
                 });
             } else {
                 logger.debug(filename + ' deleted');
