@@ -172,12 +172,24 @@ var probeCallback = function(err, probeData, next) {
                 metadata[key.toLowerCase()] = probeData.metadata[key];
             }
 
-            if (!_.isUndefined(metadata.title))
+            // try a best guess based on filename in case tags are unavailable
+            var basename = path.basename(probeData.file);
+            basename = path.basename(probeData.file, path.extname(basename));
+            var splitTitle = basename.split(/\s-\s(.+)?/);
+
+            if (!_.isUndefined(metadata.title)) {
                 song.title = metadata.title;
-            if (!_.isUndefined(metadata.artist))
+            } else {
+                song.title = splitTitle[1];
+            }
+            if (!_.isUndefined(metadata.artist)) {
                 song.artist = metadata.artist;
-            if (!_.isUndefined(metadata.album))
+            } else {
+                song.artist = splitTitle[0];
+            }
+            if (!_.isUndefined(metadata.album)) {
                 song.album = metadata.album;
+            }
 
             song.file = probeData.file;
 
