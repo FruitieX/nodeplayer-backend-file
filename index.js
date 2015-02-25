@@ -152,7 +152,6 @@ fileBackend.search = function(query, callback, errCallback) {
         callback(results);
     });
 };
-var upserted = 0;
 var probeCallback = function(err, probeData, next) {
     var formats = fileConfig.importFormats;
     if (probeData) {
@@ -198,7 +197,6 @@ var probeCallback = function(err, probeData, next) {
             db.collection('songs').update({file: probeData.file}, {'$set':song}, {upsert: true}, function(err, result) {
                 if (result == 1) {
                     logger.debug('Upserted: ' + probeData.file);
-                    upserted++;
                 } else {
                     logger.error('error while updating db: ' + err);
                 }
@@ -266,51 +264,45 @@ fileBackend.init = function(_player, _logger, callback) {
     var q = async.queue(function(task, callback) {
         probe(task.filename, function(err, probeData) {
             probeCallback(err, probeData, function() {
+                logger.silly('q.length(): ' + q.length(), 'q.running(): ' + q.running());
                 callback();
-                task.next();
             });
         });
     }, fileConfig.concurrentProbes);
 
     // walk the filesystem and scan files
     // TODO: also check through entire DB to see that all files still exist on the filesystem
-    var startTime = new Date();
     logger.info('Scanning directory: ' + importPath);
     walker = walk.walk(importPath, options);
+    var startTime = new Date();
     var scanned = 0;
     walker.on('file', function (root, fileStats, next) {
         var filename = path.join(root, fileStats.name);
         logger.verbose('Scanning: ' + filename);
         scanned++;
-        logger.silly('q.length(): ' + q.length(), 'q.running(): ' + q.running());
         q.push({
-            filename: filename,
-            next: next
+            filename: filename
         });
+        next();
     });
     walker.on('end', function() {
         logger.verbose('Scanned files: ' + scanned);
-        logger.verbose('Upserted files: ' + upserted);
         logger.verbose('Done in: ' + Math.round((new Date() - startTime) / 1000) + ' seconds');
+    });
 
-        // set fs watcher on media directory
-        watch(importPath, {recursive: true, followSymlinks: fileConfig.followSymlinks}, function (filename) {
-            if(fs.existsSync(filename)) {
-                logger.debug(filename + ' modified or created, queued for probing');
-                logger.silly('q.length(): ' + q.length(), 'q.running(): ' + q.running());
-                q.push({
-                    filename: filename,
-                    next: function() {
-                        logger.debug(filename + ' added/updated to db');
-                    }
-                });
-            } else {
-                logger.debug(filename + ' deleted');
-                db.collection('songs').remove({ file: filename }, function (err, items) {
-                    logger.debug(filename + ' deleted from db: ' + err + ', ' + items);
-                });
-            }
-        });
+    // set fs watcher on media directory
+    watch(importPath, {recursive: true, followSymlinks: fileConfig.followSymlinks}, function (filename) {
+        if(fs.existsSync(filename)) {
+            logger.debug(filename + ' modified or created, queued for probing');
+            q.unshift({
+                filename: filename
+            });
+        } else {
+            logger.debug(filename + ' deleted');
+            db.collection('songs').remove({ file: filename }, function (err, items) {
+                logger.debug(filename + ' deleted from db: ' + err + ', ' + items);
+            });
+        }
     });
 
     // callback right away, as we can scan for songs in the background
