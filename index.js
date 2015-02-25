@@ -271,9 +271,9 @@ fileBackend.init = function(_player, _logger, callback) {
         });
     }, fileConfig.concurrentProbes);
 
+    // walk the filesystem and scan files
+    // TODO: also check through entire DB to see that all files still exist on the filesystem
     if(fileConfig.rescanAtStart) {
-        // walk the filesystem and scan files
-        // TODO: also check through entire DB to see that all files still exist on the filesystem
         logger.info('Scanning directory: ' + importPath);
         walker = walk.walk(importPath, options);
         var startTime = new Date();
@@ -294,6 +294,7 @@ fileBackend.init = function(_player, _logger, callback) {
     }
 
     // set fs watcher on media directory
+    // TODO: add a debounce so if the file keeps changing we don't probe it multiple times
     watch(importPath, {recursive: true, followSymlinks: fileConfig.followSymlinks}, function (filename) {
         if(fs.existsSync(filename)) {
             logger.debug(filename + ' modified or created, queued for probing');
