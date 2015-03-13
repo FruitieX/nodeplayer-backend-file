@@ -117,11 +117,11 @@ fileBackend.search = function(query, callback, errCallback) {
         for (var i in items) {
             items[i].score = 0;
             var words = [];
-            if (items[i].title.split)
+            if (items[i].title)
                 words = words.concat(items[i].title.split(' '));
-            if (items[i].artist.split)
+            if (items[i].artist)
                 words = words.concat(items[i].artist.split(' '));
-            if (items[i].album.split)
+            if (items[i].album)
                 words = words.concat(items[i].album.split(' '));
             words.forEach(function(e, i, arr) {arr[i] = e.toLowerCase()});
             for (var ii in words) {
