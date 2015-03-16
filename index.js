@@ -17,10 +17,10 @@ fileBackend.name = 'file';
 var fileConfig, config, logger, player, walker, db, medialibraryPath;
 
 // TODO: seeking
-var encodeSong = function(origStream, seek, songID, progCallback, errCallback) {
-    var incompletePath = config.songCachePath + '/file/incomplete/' + songID + '.opus';
+var encodeSong = function(origStream, seek, song, progCallback, errCallback) {
+    var incompletePath = config.songCachePath + '/file/incomplete/' + song.songID + '.opus';
     var incompleteStream = fs.createWriteStream(incompletePath, {flags: 'w'});
-    var encodedPath = config.songCachePath + '/file/' + songID + '.opus';
+    var encodedPath = config.songCachePath + '/file/' + song.songID + '.opus';
 
     var command = ffmpeg(origStream)
         .noVideo()
@@ -30,21 +30,21 @@ var encodeSong = function(origStream, seek, songID, progCallback, errCallback) {
         .audioBitrate('192')
         .format('opus')
         .on('error', function(err) {
-            logger.error('file: error while transcoding ' + songID + ': ' + err);
+            logger.error('file: error while transcoding ' + song.songID + ': ' + err);
             if(fs.existsSync(incompletePath))
                 fs.unlinkSync(incompletePath);
-            errCallback(err);
+            errCallback(song, err);
         })
 
     var opusStream = command.pipe(null, {end: true});
     opusStream.on('data', function(chunk) {
         incompleteStream.write(chunk, undefined, function() {
-            progCallback(chunk.length, false);
+            progCallback(song, chunk.length, false);
         });
     });
     opusStream.on('end', function() {
         incompleteStream.end(undefined, undefined, function() {
-            logger.verbose('transcoding ended for ' + songID);
+            logger.verbose('transcoding ended for ' + song.songID);
 
             // TODO: we don't know if transcoding ended successfully or not,
             // and there might be a race condition between errCallback deleting
@@ -54,17 +54,17 @@ var encodeSong = function(origStream, seek, songID, progCallback, errCallback) {
             if(fs.existsSync(incompletePath))
                 fs.renameSync(incompletePath, encodedPath);
 
-            progCallback(0, true);
+            progCallback(song, 0, true);
         });
     });
 
-    logger.verbose('transcoding ' + songID + '...');
+    logger.verbose('transcoding ' + song.songID + '...');
     return function(err) {
         command.kill();
-        logger.verbose('file: canceled preparing: ' + songID + ': ' + err);
+        logger.verbose('file: canceled preparing: ' + song.songID + ': ' + err);
         if(fs.existsSync(incompletePath))
             fs.unlinkSync(incompletePath);
-        errCallback('canceled preparing: ' + songID + ': ' + err);
+        errCallback(song, 'canceled preparing: ' + song.songID + ': ' + err);
     };
 };
 
@@ -72,11 +72,11 @@ var encodeSong = function(origStream, seek, songID, progCallback, errCallback) {
 // on success: progCallback must be called with true as argument
 // on failure: errCallback must be called with error message
 // returns a function that cancels preparing
-fileBackend.prepareSong = function(songID, progCallback, errCallback) {
-    var filePath = config.songCachePath + '/file/' + songID + '.opus';
+fileBackend.prepareSong = function(song, progCallback, errCallback) {
+    var filePath = config.songCachePath + '/file/' + song.songID + '.opus';
 
     if(fs.existsSync(filePath)) {
-        progCallback(0, true);
+        progCallback(song, 0, true);
     } else {
         var cancelEncode = null;
         var canceled = false;
@@ -86,17 +86,17 @@ fileBackend.prepareSong = function(songID, progCallback, errCallback) {
                 cancelEncode();
         };
 
-        db.collection('songs').findById(songID, function (err, item) {
+        db.collection('songs').findById(song.songID, function (err, item) {
             if(canceled) {
-                errCallback('song was canceled before encoding started');
+                errCallback(song, 'song was canceled before encoding started');
             } else if(item) {
                 var readStream = fs.createReadStream(item.file);
-                cancelEncode = encodeSong(readStream, 0, songID, progCallback, errCallback);
+                cancelEncode = encodeSong(readStream, 0, song, progCallback, errCallback);
                 readStream.on('error', function(err) {
-                    errCallback(err);
+                    errCallback(song, err);
                 });
             } else {
-                errCallback('song not found in local db');
+                errCallback(song, 'song not found in local db');
             }
         });
 
@@ -104,8 +104,8 @@ fileBackend.prepareSong = function(songID, progCallback, errCallback) {
     }
 };
 
-fileBackend.isPrepared = function(songID) {
-    var filePath = config.songCachePath + '/file/' + songID + '.opus';
+fileBackend.isPrepared = function(song) {
+    var filePath = config.songCachePath + '/file/' + song.songID + '.opus';
     return fs.existsSync(filePath);
 };
 
