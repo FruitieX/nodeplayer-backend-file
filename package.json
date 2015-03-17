@@ -1,6 +1,6 @@
 {
-  "name": "nodeplayer-file",
-  "version": "0.1.0",
+  "name": "nodeplayer-backend-file",
+  "version": "0.1.9",
   "description": "local file backend for nodeplayer",
   "main": "index.js",
   "scripts": {
@@ -8,14 +8,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/FruitieX/nodeplayer-file.git"
+    "url": "https://github.com/FruitieX/nodeplayer-backend-file.git"
   },
   "author": "FruitieX",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/FruitieX/nodeplayer-file/issues"
+    "url": "https://github.com/FruitieX/nodeplayer-backend-file/issues"
   },
-  "homepage": "https://github.com/FruitieX/nodeplayer-file",
+  "homepage": "https://github.com/FruitieX/nodeplayer-backend-file",
   "dependencies": {
     "async": "^0.9.0",
     "fluent-ffmpeg": "^2.0.0-rc3",
