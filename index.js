@@ -1,5 +1,7 @@
 "use strict";
 
+var MODULE_NAME = 'backend-file';
+
 var walk = require('walk');
 var probe = require('node-ffprobe');
 var path = require('path');
@@ -11,16 +13,25 @@ var ffmpeg = require('fluent-ffmpeg');
 var watch = require('node-watch');
 var _ = require('underscore');
 
-var fileBackend = {};
-fileBackend.name = 'file';
+var nodeplayerConfig = require('nodeplayer-config');
+var coreConfig = nodeplayerConfig.getConfig();
+var defaultConfig = require('./default-config.js');
+var config = nodeplayerConfig.getConfig(MODULE_NAME, defaultConfig);
 
-var fileConfig, config, logger, player, walker, db, medialibraryPath;
+var fileBackend = {};
+fileBackend.name = MODULE_NAME;
+
+var logger;
+var player;
+var walker;
+var db;
+var medialibraryPath;
 
 // TODO: seeking
 var encodeSong = function(origStream, seek, song, progCallback, errCallback) {
-    var incompletePath = config.songCachePath + '/file/incomplete/' + song.songID + '.opus';
+    var incompletePath = coreConfig.songCachePath + '/file/incomplete/' + song.songID + '.opus';
     var incompleteStream = fs.createWriteStream(incompletePath, {flags: 'w'});
-    var encodedPath = config.songCachePath + '/file/' + song.songID + '.opus';
+    var encodedPath = coreConfig.songCachePath + '/file/' + song.songID + '.opus';
 
     var command = ffmpeg(origStream)
         .noVideo()
@@ -73,7 +84,7 @@ var encodeSong = function(origStream, seek, song, progCallback, errCallback) {
 // on failure: errCallback must be called with error message
 // returns a function that cancels preparing
 fileBackend.prepareSong = function(song, progCallback, errCallback) {
-    var filePath = config.songCachePath + '/file/' + song.songID + '.opus';
+    var filePath = coreConfig.songCachePath + '/file/' + song.songID + '.opus';
 
     if(fs.existsSync(filePath)) {
         progCallback(song, 0, true);
@@ -105,7 +116,7 @@ fileBackend.prepareSong = function(song, progCallback, errCallback) {
 };
 
 fileBackend.isPrepared = function(song) {
-    var filePath = config.songCachePath + '/file/' + song.songID + '.opus';
+    var filePath = coreConfig.songCachePath + '/file/' + song.songID + '.opus';
     return fs.existsSync(filePath);
 };
 
@@ -147,13 +158,13 @@ fileBackend.search = function(query, callback, errCallback) {
                 backendName: 'file',
                 format: 'opus'
             };
-            if (Object.keys(results.songs).length > config.searchResultCnt) break;
+            if (Object.keys(results.songs).length > coreConfig.searchResultCnt) break;
         }
         callback(results);
     });
 };
 var probeCallback = function(err, probeData, next) {
-    var formats = fileConfig.importFormats;
+    var formats = config.importFormats;
     if (probeData) {
         if (formats.indexOf(probeData.format.format_name) >= 0) { // Format is supported
             var song = {
@@ -215,41 +226,13 @@ var probeCallback = function(err, probeData, next) {
 
 fileBackend.init = function(_player, _logger, callback) {
     player = _player;
-    config = _player.config;
     logger = _logger;
 
-    var fileConfigPath = config.getConfigDir() + 'file-config.json';
-    try {
-        fileConfig = require(fileConfigPath);
-    } catch(e) {
-        if(e.code === 'MODULE_NOT_FOUND') {
-            logger.error('File backend is enabled, but no configuration file was found.');
-            logger.error('Creating sample configuration file containing default settings into:');
-            logger.error(fileConfigPath);
+    mkdirp.sync(config.songCachePath + '/file/incomplete');
 
-            mkdirp(config.getConfigDir());
-            fs.writeFileSync(fileConfigPath, JSON.stringify({
-                mongo:              "mongodb://localhost:27017/nodeplayer-file",
-                rescanAtStart:      true,
-                importPath:         "/home/example/testlibrary",
-                importFormats:      ["mp3", "flac", "ogg", "opus"],
-                concurrentProbes:   4,
-                followSymlinks:     true
-            }, undefined, 4));
+    db = require('mongoskin').db(config.mongo, {native_parser:true, safe:true});
 
-            logger.error('File created. Go edit it NOW! Relaunch nodeplayer when done configuring.');
-            process.exit(0);
-        } else {
-            logger.error('unexpected error while loading file backend configuration:');
-            logger.error(e);
-        }
-    }
-
-    mkdirp(config.songCachePath + '/file/incomplete');
-
-    db = require('mongoskin').db(fileConfig.mongo, {native_parser:true, safe:true});
-
-    var importPath = fileConfig.importPath;
+    var importPath = config.importPath;
 
     // Adds text index to database for title, artist and album fields
     // TODO: better handling and error checking
@@ -257,7 +240,7 @@ fileBackend.init = function(_player, _logger, callback) {
     db.collection('songs').ensureIndex({ title: 'text', artist: 'text', album: 'text' }, cb);
 
     var options = {
-        followLinks: fileConfig.followSymlinks
+        followLinks: config.followSymlinks
     };
 
 
@@ -269,11 +252,11 @@ fileBackend.init = function(_player, _logger, callback) {
                 callback();
             });
         });
-    }, fileConfig.concurrentProbes);
+    }, config.concurrentProbes);
 
     // walk the filesystem and scan files
     // TODO: also check through entire DB to see that all files still exist on the filesystem
-    if(fileConfig.rescanAtStart) {
+    if(config.rescanAtStart) {
         logger.info('Scanning directory: ' + importPath);
         walker = walk.walk(importPath, options);
         var startTime = new Date();
@@ -295,7 +278,7 @@ fileBackend.init = function(_player, _logger, callback) {
 
     // set fs watcher on media directory
     // TODO: add a debounce so if the file keeps changing we don't probe it multiple times
-    watch(importPath, {recursive: true, followSymlinks: fileConfig.followSymlinks}, function (filename) {
+    watch(importPath, {recursive: true, followSymlinks: config.followSymlinks}, function (filename) {
         if(fs.existsSync(filename)) {
             logger.debug(filename + ' modified or created, queued for probing');
             q.unshift({
