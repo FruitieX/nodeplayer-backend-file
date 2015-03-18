@@ -4,7 +4,7 @@ var nodeplayerConfig = require('nodeplayer-config');
 var defaultConfig = {};
 
 defaultConfig.mongo = 'mongodb://localhost:27017/nodeplayer-backend-file';
-defaultConfig.rescanAtStart = false,
+defaultConfig.rescanAtStart = false;
 defaultConfig.importPath = nodeplayerConfig.getHomeDir() + path.sep + 'music';
 defaultConfig.importFormats = [
     "mp3",

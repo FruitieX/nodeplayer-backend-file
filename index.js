@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 var MODULE_NAME = 'backend-file';
 
