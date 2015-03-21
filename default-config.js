@@ -1,5 +1,5 @@
 var path = require('path');
-var nodeplayerConfig = require('nodeplayer-config');
+var nodeplayerConfig = require('nodeplayer').config;
 
 var defaultConfig = {};
 

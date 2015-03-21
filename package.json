@@ -24,6 +24,7 @@
     "mongoskin": "^1.4.12",
     "node-ffprobe": "^1.2.2",
     "node-watch": "^0.3.4",
+    "nodeplayer": "*",
     "underscore": "^1.8.2",
     "walk": "^2.3.9"
   }
