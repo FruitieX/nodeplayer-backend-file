@@ -228,7 +228,7 @@ fileBackend.init = function(_player, _logger, callback) {
     player = _player;
     logger = _logger;
 
-    mkdirp.sync(config.songCachePath + '/file/incomplete');
+    mkdirp.sync(coreConfig.songCachePath + '/file/incomplete');
 
     db = require('mongoskin').db(config.mongo, {native_parser:true, safe:true});
 
