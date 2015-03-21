@@ -1,6 +1,8 @@
 nodeplayer-backend-file
 =======================
 
+[![Build Status](https://travis-ci.org/FruitieX/nodeplayer-backend-file.svg?branch=master)](https://travis-ci.org/FruitieX/nodeplayer-backend-file)
+
 Local file backend for nodeplayer
 
 Setup
