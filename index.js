@@ -42,10 +42,11 @@ var encodeSong = function(origStream, seek, song, progCallback, errCallback) {
         .format('opus')
         .on('error', function(err) {
             logger.error('file: error while transcoding ' + song.songID + ': ' + err);
-            if(fs.existsSync(incompletePath))
+            if (fs.existsSync(incompletePath)) {
                 fs.unlinkSync(incompletePath);
+            }
             errCallback(song, err);
-        })
+        });
 
     var opusStream = command.pipe(null, {end: true});
     opusStream.on('data', function(chunk) {
@@ -62,8 +63,9 @@ var encodeSong = function(origStream, seek, song, progCallback, errCallback) {
             // the file and us trying to move it to the songCache
 
             // atomically move result to encodedPath
-            if(fs.existsSync(incompletePath))
+            if (fs.existsSync(incompletePath)) {
                 fs.renameSync(incompletePath, encodedPath);
+            }
 
             progCallback(song, 0, true);
         });
@@ -73,8 +75,9 @@ var encodeSong = function(origStream, seek, song, progCallback, errCallback) {
     return function(err) {
         command.kill();
         logger.verbose('file: canceled preparing: ' + song.songID + ': ' + err);
-        if(fs.existsSync(incompletePath))
+        if (fs.existsSync(incompletePath)) {
             fs.unlinkSync(incompletePath);
+        }
         errCallback(song, 'canceled preparing: ' + song.songID + ': ' + err);
     };
 };
@@ -86,21 +89,22 @@ var encodeSong = function(origStream, seek, song, progCallback, errCallback) {
 fileBackend.prepareSong = function(song, progCallback, errCallback) {
     var filePath = coreConfig.songCachePath + '/file/' + song.songID + '.opus';
 
-    if(fs.existsSync(filePath)) {
+    if (fs.existsSync(filePath)) {
         progCallback(song, 0, true);
     } else {
         var cancelEncode = null;
         var canceled = false;
         var cancelPreparing = function() {
             canceled = true;
-            if(cancelEncode)
+            if (cancelEncode) {
                 cancelEncode();
+            }
         };
 
-        db.collection('songs').findById(song.songID, function (err, item) {
-            if(canceled) {
+        db.collection('songs').findById(song.songID, function(err, item) {
+            if (canceled) {
                 errCallback(song, 'song was canceled before encoding started');
-            } else if(item) {
+            } else if (item) {
                 var readStream = fs.createReadStream(item.file);
                 cancelEncode = encodeSong(readStream, 0, song, progCallback, errCallback);
                 readStream.on('error', function(err) {
@@ -121,20 +125,23 @@ fileBackend.isPrepared = function(song) {
 };
 
 fileBackend.search = function(query, callback, errCallback) {
-    db.collection('songs').find({ $text: { $search: query.terms} }).toArray(function (err, items) {
+    db.collection('songs').find({$text: {$search: query.terms}}).toArray(function(err, items) {
         // Also filter away special chars? (Remix) ?= Remix åäö日本穂?
         var termsArr = query.terms.split(' ');
-        termsArr.forEach(function(e, i, arr) {arr[i] = e.toLowerCase()});
+        termsArr.forEach(function(e, i, arr) {arr[i] = e.toLowerCase();});
         for (var i in items) {
             items[i].score = 0;
             var words = [];
-            if (items[i].title)
+            if (items[i].title) {
                 words = words.concat(items[i].title.split(' '));
-            if (items[i].artist)
+            }
+            if (items[i].artist) {
                 words = words.concat(items[i].artist.split(' '));
-            if (items[i].album)
+            }
+            if (items[i].album) {
                 words = words.concat(items[i].album.split(' '));
-            words.forEach(function(e, i, arr) {arr[i] = e.toLowerCase()});
+            }
+            words.forEach(function(e, i, arr) {arr[i] = e.toLowerCase();});
             for (var ii in words) {
                 if (termsArr.indexOf(words[ii]) >= 0) {
                     items[i].score++;
@@ -143,7 +150,7 @@ fileBackend.search = function(query, callback, errCallback) {
         }
         items.sort(function(a, b) {
             return b.score - a.score; // sort by score
-        })
+        });
         var results = {};
         results.songs = {};
         for (var song in items) {
@@ -158,7 +165,7 @@ fileBackend.search = function(query, callback, errCallback) {
                 backendName: 'file',
                 format: 'opus'
             };
-            if (Object.keys(results.songs).length > coreConfig.searchResultCnt) break;
+            if (Object.keys(results.songs).length > coreConfig.searchResultCnt) { break; }
         }
         callback(results);
     });
@@ -166,7 +173,10 @@ fileBackend.search = function(query, callback, errCallback) {
 var probeCallback = function(err, probeData, next) {
     var formats = config.importFormats;
     if (probeData) {
+        // ignore camel case rule here as we can't do anything about probeData
+        //jscs:disable requireCamelCaseOrUpperCaseIdentifiers
         if (formats.indexOf(probeData.format.format_name) >= 0) { // Format is supported
+        //jscs:enable requireCamelCaseOrUpperCaseIdentifiers
             var song = {
                 title: '',
                 artist: '',
@@ -175,10 +185,11 @@ var probeCallback = function(err, probeData, next) {
             };
 
             // some tags may be in mixed/all caps, let's convert every tag to lower case
-            var key, keys = Object.keys(probeData.metadata);
+            var key;
+            var keys = Object.keys(probeData.metadata);
             var n = keys.length;
             var metadata = {};
-            while(n--) {
+            while (n--) {
                 key = keys[n];
                 metadata[key.toLowerCase()] = probeData.metadata[key];
             }
@@ -205,7 +216,8 @@ var probeCallback = function(err, probeData, next) {
             song.file = probeData.file;
 
             song.duration = probeData.format.duration * 1000;
-            db.collection('songs').update({file: probeData.file}, {'$set':song}, {upsert: true}, function(err, result) {
+            db.collection('songs').update({file: probeData.file}, {'$set':song}, {upsert: true},
+                    function(err, result) {
                 if (result == 1) {
                     logger.debug('Upserted: ' + probeData.file);
                 } else {
@@ -222,7 +234,7 @@ var probeCallback = function(err, probeData, next) {
         logger.error('error while probing:' + err);
         next();
     }
-}
+};
 
 fileBackend.init = function(_player, _logger, callback) {
     player = _player;
@@ -230,19 +242,20 @@ fileBackend.init = function(_player, _logger, callback) {
 
     mkdirp.sync(coreConfig.songCachePath + '/file/incomplete');
 
+    //jscs:disable requireCamelCaseOrUpperCaseIdentifiers
     db = require('mongoskin').db(config.mongo, {native_parser:true, safe:true});
+    //jscs:enable requireCamelCaseOrUpperCaseIdentifiers
 
     var importPath = config.importPath;
 
     // Adds text index to database for title, artist and album fields
     // TODO: better handling and error checking
-    var cb = function(arg1, arg2) {logger.debug(arg1);logger.debug(arg2)}
-    db.collection('songs').ensureIndex({ title: 'text', artist: 'text', album: 'text' }, cb);
+    var cb = function(arg1, arg2) {logger.debug(arg1); logger.debug(arg2);};
+    db.collection('songs').ensureIndex({title: 'text', artist: 'text', album: 'text'}, cb);
 
     var options = {
         followLinks: config.followSymlinks
     };
-
 
     // create async.js queue to limit concurrent probes
     var q = async.queue(function(task, callback) {
@@ -256,12 +269,12 @@ fileBackend.init = function(_player, _logger, callback) {
 
     // walk the filesystem and scan files
     // TODO: also check through entire DB to see that all files still exist on the filesystem
-    if(config.rescanAtStart) {
+    if (config.rescanAtStart) {
         logger.info('Scanning directory: ' + importPath);
         walker = walk.walk(importPath, options);
         var startTime = new Date();
         var scanned = 0;
-        walker.on('file', function (root, fileStats, next) {
+        walker.on('file', function(root, fileStats, next) {
             var filename = path.join(root, fileStats.name);
             logger.verbose('Scanning: ' + filename);
             scanned++;
@@ -278,15 +291,15 @@ fileBackend.init = function(_player, _logger, callback) {
 
     // set fs watcher on media directory
     // TODO: add a debounce so if the file keeps changing we don't probe it multiple times
-    watch(importPath, {recursive: true, followSymlinks: config.followSymlinks}, function (filename) {
-        if(fs.existsSync(filename)) {
+    watch(importPath, {recursive: true, followSymlinks: config.followSymlinks}, function(filename) {
+        if (fs.existsSync(filename)) {
             logger.debug(filename + ' modified or created, queued for probing');
             q.unshift({
                 filename: filename
             });
         } else {
             logger.debug(filename + ' deleted');
-            db.collection('songs').remove({ file: filename }, function (err, items) {
+            db.collection('songs').remove({file: filename}, function(err, items) {
                 logger.debug(filename + ' deleted from db: ' + err + ', ' + items);
             });
         }
