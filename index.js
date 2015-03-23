@@ -1,6 +1,7 @@
 'use strict';
 
-var MODULE_NAME = 'backend-file';
+var MODULE_NAME = 'file';
+var MODULE_TYPE = 'backend';
 
 var walk = require('walk');
 var probe = require('node-ffprobe');
@@ -16,7 +17,7 @@ var _ = require('underscore');
 var nodeplayerConfig = require('nodeplayer').config;
 var coreConfig = nodeplayerConfig.getConfig();
 var defaultConfig = require('./default-config.js');
-var config = nodeplayerConfig.getConfig(MODULE_NAME, defaultConfig);
+var config = nodeplayerConfig.getConfig(MODULE_TYPE + '-' + MODULE_NAME, defaultConfig);
 
 var fileBackend = {};
 fileBackend.name = MODULE_NAME;
@@ -162,7 +163,7 @@ fileBackend.search = function(query, callback, errCallback) {
                 duration: items[song].duration,
                 songID: items[song]._id.toString(),
                 score: 100, // TODO
-                backendName: 'file',
+                backendName: MODULE_NAME,
                 format: 'opus'
             };
             if (Object.keys(results.songs).length > coreConfig.searchResultCnt) { break; }

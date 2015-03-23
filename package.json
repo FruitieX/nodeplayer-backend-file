@@ -1,6 +1,6 @@
 {
   "name": "nodeplayer-backend-file",
-  "version": "0.1.9981",
+  "version": "0.1.999",
   "description": "local file backend for nodeplayer",
   "main": "index.js",
   "scripts": {
