@@ -256,7 +256,7 @@ fileBackend.init = function(_player, _logger, callback) {
             logger.error(err);
             logger.error('Forgot to setup mongodb?');
         } else if (index) {
-            logger.debug(index);
+            logger.silly('index: ' + index);
         }
     };
     db.collection('songs').ensureIndex({title: 'text', artist: 'text', album: 'text'}, cb);
