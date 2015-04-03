@@ -251,7 +251,14 @@ fileBackend.init = function(_player, _logger, callback) {
 
     // Adds text index to database for title, artist and album fields
     // TODO: better handling and error checking
-    var cb = function(arg1, arg2) {logger.debug(arg1); logger.debug(arg2);};
+    var cb = function(err, index) {
+        if (err) {
+            logger.error(err);
+            logger.error('Forgot to setup mongodb?');
+        } else if (index) {
+            logger.debug(index);
+        }
+    };
     db.collection('songs').ensureIndex({title: 'text', artist: 'text', album: 'text'}, cb);
 
     var options = {
