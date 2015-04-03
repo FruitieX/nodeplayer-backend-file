@@ -177,7 +177,7 @@ var probeCallback = function(err, probeData, next) {
         // ignore camel case rule here as we can't do anything about probeData
         //jscs:disable requireCamelCaseOrUpperCaseIdentifiers
         if (formats.indexOf(probeData.format.format_name) >= 0) { // Format is supported
-        //jscs:enable requireCamelCaseOrUpperCaseIdentifiers
+            //jscs:enable requireCamelCaseOrUpperCaseIdentifiers
             var song = {
                 title: '',
                 artist: '',
