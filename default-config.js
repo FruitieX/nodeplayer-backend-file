@@ -14,5 +14,6 @@ defaultConfig.importFormats = [
 ];
 defaultConfig.concurrentProbes = 4;
 defaultConfig.followSymlinks = true;
+defaultConfig.maxScore = 10; // FIXME: ATM the search algo can return VERY irrelevant results
 
 module.exports = defaultConfig;

@@ -154,6 +154,9 @@ fileBackend.search = function(query, callback, errCallback) {
         });
         var results = {};
         results.songs = {};
+
+        var numItems = items.length;
+        var cur = 0;
         for (var song in items) {
             results.songs[items[song]._id.toString()] = {
                 artist: items[song].artist,
@@ -162,10 +165,11 @@ fileBackend.search = function(query, callback, errCallback) {
                 albumArt: null, // TODO: can we add this?
                 duration: items[song].duration,
                 songID: items[song]._id.toString(),
-                score: 100, // TODO
+                score: config.maxScore * (numItems - cur) / numItems,
                 backendName: MODULE_NAME,
                 format: 'opus'
             };
+            cur++;
             if (Object.keys(results.songs).length > coreConfig.searchResultCnt) { break; }
         }
         callback(results);
