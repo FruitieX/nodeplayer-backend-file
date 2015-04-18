@@ -52,7 +52,7 @@ var encodeSong = function(origStream, seek, song, progCallback, errCallback) {
     var opusStream = command.pipe(null, {end: true});
     opusStream.on('data', function(chunk) {
         incompleteStream.write(chunk, undefined, function() {
-            progCallback(song, chunk.length, false);
+            progCallback(song, chunk, false);
         });
     });
     opusStream.on('end', function() {
@@ -68,7 +68,7 @@ var encodeSong = function(origStream, seek, song, progCallback, errCallback) {
                 fs.renameSync(incompletePath, encodedPath);
             }
 
-            progCallback(song, 0, true);
+            progCallback(song, null, true);
         });
     });
 
@@ -91,7 +91,7 @@ fileBackend.prepareSong = function(song, progCallback, errCallback) {
     var filePath = coreConfig.songCachePath + '/file/' + song.songID + '.opus';
 
     if (fs.existsSync(filePath)) {
-        progCallback(song, 0, true);
+        progCallback(song, null, true);
     } else {
         var cancelEncode = null;
         var canceled = false;
