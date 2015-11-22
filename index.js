@@ -13,6 +13,7 @@ var async = require('async');
 var ffmpeg = require('fluent-ffmpeg');
 var watch = require('node-watch');
 var _ = require('underscore');
+var escapeStringRegexp = require('escape-string-regexp');
 
 var nodeplayerConfig = require('nodeplayer').config;
 var coreConfig = nodeplayerConfig.getConfig();
@@ -126,8 +127,33 @@ fileBackend.isPrepared = function(song) {
 };
 
 fileBackend.search = function(query, callback, errCallback) {
-    db.collection('songs').find({$text: {$search: query.terms}}).toArray(function(err, items) {
+    var q;
+    if (query.any) {
+        q = {
+            $or: [
+                {artist: new RegExp(escapeStringRegexp(query.any), 'i')},
+                {title: new RegExp(escapeStringRegexp(query.any), 'i')},
+                {album: new RegExp(escapeStringRegexp(query.any), 'i')}
+            ]
+        };
+    } else {
+        q = {
+            $and: []
+        };
+
+        _.keys(query).forEach(function(key) {
+            var criterion = {};
+            criterion[key] = new RegExp(escapeStringRegexp(query[key]), 'i');
+            q.$and.push(criterion);
+        });
+    }
+
+    logger.verbose('Got query: ');
+    logger.verbose(q);
+
+    db.collection('songs').find(q).toArray(function(err, items) {
         // Also filter away special chars? (Remix) ?= Remix åäö日本穂?
+        /*
         var termsArr = query.terms.split(' ');
         termsArr.forEach(function(e, i, arr) {arr[i] = e.toLowerCase();});
         for (var i in items) {
@@ -152,6 +178,7 @@ fileBackend.search = function(query, callback, errCallback) {
         items.sort(function(a, b) {
             return b.score - a.score; // sort by score
         });
+        */
         var results = {};
         results.songs = {};
 
