@@ -23,8 +23,7 @@ var config = nodeplayerConfig.getConfig(MODULE_TYPE + '-' + MODULE_NAME, default
 var fileBackend = {};
 fileBackend.name = MODULE_NAME;
 
-var logger;
-var player;
+var logger = require('nodeplayer').logger(MODULE_NAME);
 var walker;
 var db;
 var medialibraryPath;
@@ -268,10 +267,7 @@ var probeCallback = function(err, probeData, next) {
     }
 };
 
-fileBackend.init = function(_player, _logger, callback) {
-    player = _player;
-    logger = _logger;
-
+fileBackend.init = function(callback) {
     mkdirp.sync(coreConfig.songCachePath + '/file/incomplete');
 
     //jscs:disable requireCamelCaseOrUpperCaseIdentifiers
